@@ -1,0 +1,18 @@
+[project]
+name = "video-download"
+version = "0.1.0"
+description = "视频下载脚本"
+requires-python = ">=3.8"
+dependencies = [
+    "yt-dlp>=2024.1.1",
+]
+
+[project.scripts]
+video-download = "video_download.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
