@@ -604,8 +604,14 @@ bili_jct值: 456def000...（32个字符的十六进制）
 
         ydl_opts = {
             'format': quality_map.get(quality, 'bestvideo+bestaudio/best'),
-            # 使用原始标题作为文件名，包含序号避免重名
-            'outtmpl': str(output_path / '%(playlist_index)03d - %(title)s.%(ext)s'),
+            # 使用序号+ID作为文件名（避免title为NA的问题）
+            # %(playlist_index)s: 合集中的序号
+            # %(id)s: 视频BV号
+            # %(ext)s: 文件扩展名
+            'outtmpl': str(output_path / '%(playlist_index)03d - [%(id)s].%(ext)s'),
+            # 同时在下载时记录真实标题到日志
+            'writethumbnail': False,
+            'writesubtitles': False,
             'cookies': self.cookies,
             'ffmpeg_location': ffmpeg_location,
             'progress_hooks': [self._progress_hook],
@@ -641,8 +647,46 @@ bili_jct值: 456def000...（32个字符的十六进制）
                     self.root.after(0, lambda t=title: self.log(f"开始下载: {t}"))
 
                     try:
+                        # 下载前记录文件列表，用于后续重命名
+                        files_before = set(output_path.glob('*')) if output_path.exists() else set()
+                        
                         ydl.download([video_url])
-                        self.root.after(0, lambda t=title: self.log(f"✅ {t} 下载完成!"))
+                        
+                        # 下载后查找新文件并重命名
+                        import re
+                        files_after = set(output_path.glob('*')) if output_path.exists() else set()
+                        new_files = files_after - files_before
+                        
+                        # 清理标题中的非法字符
+                        safe_title = re.sub(r'[<>:"/\\|?*]', '_', title)
+                        safe_title = safe_title[:100]  # 限制长度
+                        
+                        for new_file in new_files:
+                            if new_file.is_file():
+                                # 构建新文件名：序号 - 标题.扩展名
+                                ext = new_file.suffix
+                                playlist_idx = idx + 1
+                                new_name = f"{playlist_idx:03d} - {safe_title}{ext}"
+                                new_path = output_path / new_name
+                                
+                                # 如果目标文件已存在，添加序号
+                                counter = 1
+                                while new_path.exists():
+                                    new_name = f"{playlist_idx:03d} - {safe_title}_{counter}{ext}"
+                                    new_path = output_path / new_name
+                                    counter += 1
+                                
+                                # 重命名文件
+                                try:
+                                    new_file.rename(new_path)
+                                    self.root.after(0, lambda t=title, n=new_name: 
+                                        self.log(f"✅ {t} 下载完成! → {n}"))
+                                except Exception as rename_err:
+                                    # 重命名失败时保持原文件名
+                                    self.root.after(0, lambda t=title: 
+                                        self.log(f"✅ {t} 下载完成! (文件名未修改)"))
+                                break
+                        
                     except Exception as exc:
                         self.root.after(0, lambda t=title, e=str(exc): self.log(f"❌ {t} 下载失败: {e}"))
 
